@@ -25,26 +25,6 @@ SOURCE_DIR=$(cd "$SOURCE_DIR" 2>/dev/null && pwd) || exit 2
 
 SOURCE_PATH="$SOURCE_DIR/$SOURCE_NAME"
 
-OUTPUT=$(awk '
-{
-    if (match($0, /Output:[[:space:]]*[[:alnum:]_.-]+/)) {
-        result = substr($0, RSTART, RLENGTH)
-        sub(/^Output:[[:space:]]*/, "", result)
-        print result
-        exit
-    }
-}' "$SOURCE_PATH")
-
-if [ -z "$OUTPUT" ]; then
-    echo "Ошибка: комментарий Output не найден"
-    exit 4
-fi
-
-if [ "$OUTPUT" = "$SOURCE_NAME" ]; then
-    echo "Ошибка: имя выходного файла совпадает с исходным"
-    exit 5
-fi
-
 case "$SOURCE_NAME" in
     *.c)
         BUILD_TYPE="c"
@@ -60,6 +40,42 @@ case "$SOURCE_NAME" in
         exit 6
         ;;
 esac
+
+case "$BUILD_TYPE" in
+    c|cpp)
+        OUTPUT=$(awk '
+        {
+            if (match($0, /^[[:space:]]*\/\/[[:space:]]*Output:[[:space:]]*[[:alnum:]_.-]+/)) {
+                result = substr($0, RSTART, RLENGTH)
+                sub(/^[[:space:]]*\/\/[[:space:]]*Output:[[:space:]]*/, "", result)
+                print result
+                exit
+            }
+        }' "$SOURCE_PATH")
+        ;;
+
+    tex)
+        OUTPUT=$(awk '
+        {
+            if (match($0, /^[[:space:]]*%[[:space:]]*Output:[[:space:]]*[[:alnum:]_.-]+/)) {
+                result = substr($0, RSTART, RLENGTH)
+                sub(/^[[:space:]]*%[[:space:]]*Output:[[:space:]]*/, "", result)
+                print result
+                exit
+            }
+        }' "$SOURCE_PATH")
+        ;;
+esac
+
+if [ -z "$OUTPUT" ]; then
+    echo "Ошибка: комментарий Output не найден"
+    exit 4
+fi
+
+if [ "$OUTPUT" = "$SOURCE_NAME" ]; then
+    echo "Ошибка: имя выходного файла совпадает с исходным"
+    exit 5
+fi
 
 TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/build.XXXXXX") || {
     echo "Ошибка: не удалось создать временную директорию"
@@ -77,6 +93,8 @@ trap cleanup 0
 
 trap 'exit 129' HUP
 trap 'exit 130' INT
+trap 'exit 131' QUIT
+trap 'exit 141' PIPE
 trap 'exit 143' TERM
 
 cp "$SOURCE_PATH" "$TMP_DIR/$SOURCE_NAME" || {
